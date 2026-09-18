@@ -1,0 +1,28 @@
+# Core
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+pymupdf>=1.24
+pandas>=2.1
+pydantic>=2.5
+PyYAML>=6.0
+
+# NLP / modeling
+spacy>=3.7
+langdetect>=1.0.9
+bertopic>=0.16
+sentence-transformers>=2.5
+scikit-learn>=1.4
+
+# Dashboard / viz
+plotly>=5.19
+streamlit>=1.32
+
+# Storage
+pyarrow>=15.0
+
+# Dev / testing
+pytest>=8.0
+pytest-cov>=4.1
+ruff>=0.3
+black>=24.1

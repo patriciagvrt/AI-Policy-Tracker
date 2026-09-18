@@ -1,0 +1,44 @@
+project:
+  name: "Nordic University AI Policy Tracker (test)"
+  phase: "pilot"
+  pilot_disclaimer: "Test disclaimer."
+
+collection:
+  user_agent: "NordicAIPolicyTrackerBot-test/0.1"
+  request_delay_seconds: 0
+  request_timeout_seconds: 5
+  max_retries: 1
+  respect_robots_txt: true
+
+paths:
+  universities_csv: "tests/fixtures/universities_test.csv"
+  coding_dimensions_yaml: "config/coding_dimensions.yaml"
+  raw_dir: "tests/fixtures/tmp_raw"
+  interim_dir: "tests/fixtures/tmp_interim"
+  processed_dir: "tests/fixtures/tmp_processed"
+  annotations_dir: "tests/fixtures/tmp_annotations"
+  samples_dir: "tests/fixtures/tmp_samples"
+  database_path: "tests/fixtures/tmp_processed/test.db"
+  logs_dir: "tests/fixtures/tmp_logs"
+  models_dir: "tests/fixtures/tmp_models"
+
+language:
+  analytical_scope: "english_only_v1"
+  dataset_description: "Test dataset description."
+
+segmentation:
+  chunk_size_tokens: 50
+  chunk_overlap_tokens: 10
+  respect_sentence_boundaries: true
+
+bertopic:
+  embedding_model: "all-MiniLM-L6-v2"
+  random_seed: 42
+  min_topic_size: 2
+  min_documents_for_modeling: 3
+  language: "english"
+
+indices:
+  default_weighting: "equal"
+  scale_min: 0
+  scale_max: 100

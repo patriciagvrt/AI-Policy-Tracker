@@ -1,0 +1,106 @@
+# --- Exact list required by the project's compliance correction -----------
+# (legal/copyright + personal-data safeguards: never track raw source
+# material, databases, embeddings, or secrets in a public repo)
+.venv/
+venv/
+.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.streamlit/
+logs/
+models/
+data/raw/
+data/interim/
+*.db
+*.sqlite
+*.sqlite3
+*.pdf
+*.html
+*.parquet
+
+# --- Narrow, explicit exceptions for small synthetic test fixtures ---------
+# These are hand-written, tiny, synthetic files used only by pytest (never
+# real collected policy text) -- see tests/fixtures/. Listed individually
+# and narrowly rather than un-ignoring a whole extension, so a real PDF or
+# database accidentally dropped into the repo is still caught.
+!tests/fixtures/
+!tests/fixtures/*.html
+!tests/fixtures/*.pdf
+!tests/fixtures/*.db
+
+# --- Additional virtual-env / build spellings not covered above ------------
+env/
+ENV/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Secrets -----------------------------------------------------------
+*.key
+*.pem
+
+# --- Data (raw/ is covered by the exact-list entry above; interim/processed
+# are derived or may be non-redistributable; keep folders via .gitkeep) -----
+# Compliance note: this pilot's earlier delivery tracked
+# data/raw/pilot_sandbox_retrieved/*.md (this sandbox's substitute
+# retrieval text for 4 of 5 pilot documents) directly in git. That has been
+# REMOVED as of this compliance correction: those files are full extracted
+# policy text, and no explicit redistribution license has been confirmed
+# for any of the five pilot sources (every document's legal_review_status
+# is still "pending" -- see docs/legal_and_compliance.md). Full policy text
+# must never be committed to a public repo without an explicit license
+# allowing redistribution; only metadata, derived results (indices, topic
+# assignments), short necessary excerpts (each with title/institution/
+# URL/retrieval date), and links to the official source pages belong here.
+# The files themselves are NOT deleted from the working tree (deleting
+# real, non-fabricated pilot data is a separate, deliberate decision this
+# correction was not asked to make) -- they are simply no longer tracked by
+# git, per the blanket data/raw/ and *.html rules above.
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*.db
+data/processed/*.parquet
+!data/processed/.gitkeep
+data/samples/*
+!data/samples/.gitkeep
+
+# Annotations may contain a researcher's working notes; keep the template but not working copies
+data/annotations/*.working.csv
+
+# Logs
+logs/*.log
+logs/*.jsonl
+
+# Models / caches
+models/*
+!models/.gitkeep
+.cache/
+*.cache/
+huggingface_cache/
+.sentence_transformers/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Outputs (derived; regenerate via scripts)
+outputs/figures/*
+!outputs/figures/.gitkeep
+outputs/tables/*
+!outputs/tables/.gitkeep
+outputs/reports/*
+!outputs/reports/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# pytest / coverage
+.coverage
+htmlcov/

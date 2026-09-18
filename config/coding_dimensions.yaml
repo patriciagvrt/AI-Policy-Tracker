@@ -1,0 +1,123 @@
+# Coding dimensions for the Nordic University AI Policy Tracker.
+#
+# This file is the single source of truth for which dimensions exist,
+# which index (axis) each belongs to, and the rule-based keyword hints
+# used by the indicator-assistance layer (src/nordic_ai_policy_tracker/modeling/indicators.py).
+#
+# IMPORTANT: `keyword_hints` are used only to locate CANDIDATE sentences for
+# a human coder (or the rule-based assistant) to inspect. They are never used
+# to assign an ordinal score by themselves. Every score of 1 or 2 requires a
+# stored evidence passage, and negation/stance is resolved by the coder (or by
+# the negation-aware rules in indicators.py), never by keyword presence alone.
+#
+# Scale (applies to every dimension):
+#   0 = absent     -- dimension not substantively addressed
+#   1 = mentioned  -- brief, general, no concrete instructions
+#   2 = emphasized -- clear, repeated, or with concrete requirements/examples/procedures
+
+schema_version: 1
+
+axes:
+  restriction_enforcement:
+    label: "Restriction and Enforcement Index (REI)"
+    description: >
+      The degree to which a document frames generative AI primarily as a
+      compliance risk to be controlled, penalized, or detected.
+  pedagogical_support:
+    label: "Pedagogical Integration and Support Index (PISI)"
+    description: >
+      The degree to which a document frames generative AI as a teaching and
+      learning capability to be developed and supported responsibly.
+
+dimensions:
+  # ---- Restriction and Enforcement Index (REI) components ----
+  - id: prohibition_restriction
+    axis: restriction_enforcement
+    label: "Prohibition or restriction"
+    keyword_hints: ["not allowed", "prohibited", "forbidden", "may not", "must not", "banned", "not permitted"]
+
+  - id: punishment_disciplinary
+    axis: restriction_enforcement
+    label: "Punishment or disciplinary consequences"
+    keyword_hints: ["disciplinary", "sanction", "penalty", "expulsion", "consequences", "misconduct proceedings"]
+
+  - id: academic_misconduct_framing
+    axis: restriction_enforcement
+    label: "Academic misconduct framing"
+    keyword_hints: ["academic misconduct", "cheating", "plagiarism", "dishonesty", "violation of academic integrity"]
+
+  - id: ai_detection_surveillance
+    axis: restriction_enforcement
+    label: "AI detection or surveillance"
+    keyword_hints: ["AI detector", "detection tool", "plagiarism checker", "monitor", "flagged", "Turnitin"]
+
+  - id: mandatory_disclosure
+    axis: restriction_enforcement
+    label: "Mandatory disclosure of AI use"
+    keyword_hints: ["must disclose", "declaration", "must state", "required to report", "must be disclosed"]
+
+  - id: assessment_examination_control
+    axis: restriction_enforcement
+    label: "Assessment and examination control"
+    keyword_hints: ["exam", "examination", "closed-book", "assessment rules", "during the exam", "invigilat"]
+
+  - id: privacy_security_restriction
+    axis: restriction_enforcement
+    label: "Privacy, security, or data-protection restrictions"
+    keyword_hints: ["GDPR", "confidential data", "personal data", "do not upload", "data protection", "security risk"]
+
+  # ---- Pedagogical Integration and Support Index (PISI) components ----
+  - id: permitted_encouraged_use
+    axis: pedagogical_support
+    label: "Permitted or encouraged use"
+    keyword_hints: ["is allowed", "encouraged to use", "may use", "permitted", "can support your learning"]
+
+  - id: ai_literacy
+    axis: pedagogical_support
+    label: "AI literacy"
+    keyword_hints: ["AI literacy", "understand how AI works", "digital literacy", "critical AI skills"]
+
+  - id: critical_evaluation
+    axis: pedagogical_support
+    label: "Critical evaluation of AI outputs"
+    keyword_hints: ["verify", "fact-check", "hallucinate", "evaluate critically", "AI can be wrong", "inaccurate"]
+
+  - id: responsible_use
+    axis: pedagogical_support
+    label: "Responsible use"
+    keyword_hints: ["responsible use", "responsible AI", "use responsibly", "ethical use"]
+
+  - id: teaching_integration
+    axis: pedagogical_support
+    label: "Teaching integration"
+    keyword_hints: ["course design", "assignment design", "integrate AI into teaching", "curriculum", "learning objectives"]
+
+  - id: student_support
+    axis: pedagogical_support
+    label: "Student support"
+    keyword_hints: ["writing centre", "writing center", "student support", "guidance for students", "helpdesk", "workshop"]
+
+  - id: staff_support
+    axis: pedagogical_support
+    label: "Staff or teacher support"
+    keyword_hints: ["support for teachers", "training for staff", "faculty development", "teaching development office"]
+
+  - id: transparency_citation
+    axis: pedagogical_support
+    label: "Transparency and citation guidance"
+    keyword_hints: ["cite", "citation", "attribute", "reference the tool", "acknowledge the use of"]
+
+  - id: equity_accessibility_inclusion
+    axis: pedagogical_support
+    label: "Equity, accessibility, and inclusion"
+    keyword_hints: ["accessibility", "equity", "inclusion", "equal access", "disability", "underrepresented"]
+
+  - id: privacy_awareness_safe_use
+    axis: pedagogical_support
+    label: "Privacy awareness and safe use"
+    keyword_hints: ["be aware", "protect your data", "safe use", "privacy-conscious", "think before you share"]
+
+  - id: human_oversight_responsibility
+    axis: pedagogical_support
+    label: "Human oversight and individual responsibility"
+    keyword_hints: ["responsible for", "human judgement", "human judgment", "final responsibility", "accountable"]

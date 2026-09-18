@@ -1,0 +1,53 @@
+# Global settings for the Nordic University AI Policy Tracker pilot.
+# Values here are read by src/nordic_ai_policy_tracker/config.py.
+
+project:
+  name: "Nordic University AI Policy Tracker"
+  phase: "pilot"
+  pilot_disclaimer: >
+    This is a five-university pilot (one institution per Nordic country).
+    It tests the data pipeline end to end and is NOT a representative
+    sample of any national higher-education system. Results describe the
+    five collected documents only. See docs/limitations.md.
+
+collection:
+  user_agent: "NordicAIPolicyTrackerBot/0.1 (research pilot; contact: patriciacruz1097@gmail.com)"
+  request_delay_seconds: 3
+  request_timeout_seconds: 20
+  max_retries: 2
+  respect_robots_txt: true
+
+paths:
+  universities_csv: "config/universities.csv"
+  coding_dimensions_yaml: "config/coding_dimensions.yaml"
+  raw_dir: "data/raw"
+  interim_dir: "data/interim"
+  processed_dir: "data/processed"
+  annotations_dir: "data/annotations"
+  samples_dir: "data/samples"
+  database_path: "data/processed/policy_tracker.db"
+  logs_dir: "logs"
+  models_dir: "models"
+
+language:
+  analytical_scope: "english_only_v1"
+  dataset_description: >
+    Publicly available English-language AI guidance from selected Nordic
+    universities.
+
+segmentation:
+  chunk_size_tokens: 200
+  chunk_overlap_tokens: 40
+  respect_sentence_boundaries: true
+
+bertopic:
+  embedding_model: "all-MiniLM-L6-v2"
+  random_seed: 42
+  min_topic_size: 3
+  min_documents_for_modeling: 3
+  language: "english"
+
+indices:
+  default_weighting: "equal"
+  scale_min: 0
+  scale_max: 100
