@@ -252,7 +252,39 @@ def list_documents(db_path: str | Path) -> list[sqlite3.Row]:
 
 
 def save_dimension_score(db_path: str | Path, score: DimensionScore) -> None:
+    """Insert or replace one DimensionScore row.
+
+    Identity for "replace" purposes is (document_id, dimension_id,
+    coder_id, coder_type, coding_round) -- the same (document, dimension)
+    coded again by the same coder in the same round is an update to that
+    coding decision, not a second, independent one. A different coder_id
+    (a second human coder, for inter-coder reliability) or a different
+    coding_round (a recoding pass) legitimately gets its own row.
+
+    This was previously a plain INSERT with no such guard, which meant
+    re-running scripts/calculate_indices.py (a normal, expected workflow --
+    e.g. running the rule-based pass once, then again later with
+    --include-human) silently duplicated every dimension_scores row rather
+    than updating it. That duplication was confirmed as the root cause of
+    the Policy Matrix page showing each automated component score twice:
+    the page correctly renders one entry per matching row, but the
+    underlying table had two identical rows per (document, dimension).
+    """
     with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            DELETE FROM dimension_scores
+            WHERE document_id = ? AND dimension_id = ? AND coder_id = ?
+              AND coder_type = ? AND coding_round = ?
+            """,
+            (
+                score.document_id,
+                score.dimension_id,
+                score.coder_id,
+                score.coder_type.value,
+                score.coding_round,
+            ),
+        )
         conn.execute(
             """
             INSERT INTO dimension_scores (
@@ -296,16 +328,37 @@ def list_dimension_scores(
 
 
 def save_index_result(db_path: str | Path, result: IndexResult) -> None:
-    """Save one IndexResult row.
+    """Insert or replace one IndexResult row.
 
     result.index_name must be an IndexKind value (automated_rei_hint,
     human_rei, validated_rei, etc.) -- the schema's own typing already
     enforces this before we ever get here. The index_kind column is
     derived from it automatically, so callers never have to keep the two
     in sync by hand.
+
+    Identity for "replace" purposes is (document_id, index_name,
+    coder_type, coding_round): recomputing the same index kind for the
+    same document/round replaces the prior value rather than adding a
+    second row next to it. This was previously a plain INSERT with no
+    such guard -- see save_dimension_score()'s docstring for the bug this
+    caused (confirmed root cause of the Policy Matrix page's duplicated
+    component-score display) and why re-running scripts/calculate_indices.py
+    is a normal workflow this needs to tolerate.
     """
     index_kind_value = IndexKind(result.index_name)
     with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            DELETE FROM index_results
+            WHERE document_id = ? AND index_name = ? AND coder_type = ? AND coding_round = ?
+            """,
+            (
+                result.document_id,
+                index_kind_value.value,
+                result.coder_type.value,
+                result.coding_round,
+            ),
+        )
         conn.execute(
             """
             INSERT INTO index_results (
