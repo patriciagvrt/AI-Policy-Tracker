@@ -53,6 +53,47 @@ detail, and `docs/limitations.md` before interpreting any result.
 All five sources are recorded in `config/universities.csv` as
 `verification_status=verified`, `active=true`, `selection_status=pilot_selected`.
 
+## Pilot status
+
+| Item | Final pilot status |
+|---|---|
+| Universities | 5 |
+| Successfully collected documents | 5 |
+| Human-coded decisions | 90 |
+| REI dimensions per document | 7 |
+| PISI dimensions per document | 11 |
+| Text chunks | 29 |
+| Experimental BERTopic topics | 3 |
+| Outlier chunks | 3 |
+| Human coders | 1 |
+| Representativeness | Pilot only |
+
+**How to read these results.** The human-coded REI/PISI indices are this
+pilot's substantive research results -- one coder's complete reading of
+every dimension for every document, evidence-backed for every score of 1
+or 2. The automated index hints are exploratory only: a rule-based,
+negation-aware keyword matcher used to surface candidate evidence for a
+human coder, never a validated replacement for human interpretation, and
+they diverge substantially from the human-coded scores (see
+`docs/pilot_analysis.md`). BERTopic's topic-model output is likewise
+experimental: it was fit on only 5 documents and 29 chunks, far too few
+for the resulting topics to be considered stable or generalizable, and two
+of the three topics are institution-specific rather than cross-institution
+themes. With one human coder and five documents, this pilot is not
+representative of Nordic or European higher education, supports no
+university or country ranking, and cannot test whether REI and PISI are
+statistically associated with one another.
+
+The public, tracked copy of the full pilot analysis is
+`docs/pilot_analysis.md` (identical in content to the generated
+`outputs/reports/pilot_analysis.md`, which stays local and git-ignored).
+Phase 2 development -- expanding to 30+ universities -- happens on the
+`phase-2-30-universities` branch; the `v0.1-pilot` tag preserves this
+five-university pilot as a fixed historical milestone. The pilot's SQLite
+database and Parquet outputs are git-ignored (derived, regenerable data)
+and are additionally preserved through a checksum-verified local archive
+snapshot under `data/archive/`.
+
 ## Architecture
 
 ```
@@ -122,26 +163,24 @@ python scripts/collect_documents.py --live
 
 The collector checks `robots.txt` before fetching, never bypasses
 authentication/CAPTCHAs/rate limits, and stops immediately (no retries) on
-a 403 or 429 response -- see `docs/legal_and_compliance.md`. Lund
-University's document has never been successfully collected in this
-project (its PDF collection failed, and no fabricated or summarized
-substitute is stored in its place); it remains marked "collection
-pending" -- see `docs/limitations.md`.
+a 403 or 429 response -- see `docs/legal_and_compliance.md`.
 
 This reads `config/universities.csv`, collects every `active=true` +
 `verification_status=verified` source, and writes to
 `data/processed/policy_tracker.db` plus
 `outputs/reports/collection_audit.md`.
 
-> **Note on this delivered pilot's data:** the pipeline was first built and
-> run inside a network-sandboxed environment that could not reach
-> university websites directly. Four of the five documents were populated
-> via a documented one-time substitute retrieval step
-> (`python scripts/collect_documents.py --sandbox-fixture` -- see
-> `data/raw/pilot_sandbox_retrieved/README.md`), and Lund University's PDF
-> could not be retrieved at all in that environment (recorded as a genuine
-> collection failure, not approximated). Re-run with `--live` from a
-> machine with normal internet access to collect all five for real.
+**Final pilot collection result:** all five documents, including Lund
+University's PDF, were collected successfully through the project's live
+HTTP collection pipeline -- 5 attempted, 5 collected, 0 failures, 0
+duplicates (see `outputs/reports/collection_audit.md`). No browser-
+automation fallback, sandbox substitute, or fabricated/summarized stand-in
+text was used for any of the five final pilot documents. An earlier
+development environment could not reach university websites directly and
+used a documented substitute-retrieval step for some sources during
+pipeline testing; that step is not part of the final pilot corpus and is
+retained only as historical development context under
+`data/raw/pilot_sandbox_retrieved/`.
 
 ## Processing
 
@@ -156,9 +195,28 @@ and writes `outputs/reports/data_quality_report.md`.
 
 1. Read `docs/coding_guide.md`.
 2. Launch the dashboard (see below) and use the **Annotation** page, or
-   edit `data/annotations/annotation_template.csv` directly.
+   edit `data/annotations/annotation_template.csv` directly (this complete
+   file, with full evidence text, stays local and is git-ignored -- see
+   below).
 3. Every score of 1 or 2 requires an evidence passage -- this is enforced
    by the schema, not just a guideline.
+
+**Three forms of this pilot's annotation data, not to be confused:**
+
+- `data/annotations/annotation_template.csv` (local only, git-ignored) --
+  the complete working file the pipeline and dashboard read and write,
+  including full evidence passages. This is what pilot scripts use.
+- `data/annotations/private/pilot_annotations_complete.csv` (local only,
+  git-ignored) -- a preserved, verified copy of the complete file above,
+  kept for internal validation.
+- `data/annotations/pilot_scores_public.csv` (tracked in git) -- the
+  public, scores-only dataset: no evidence text, no timestamps, no coder
+  name. Reproduces the published human REI/PISI values exactly. See
+  `docs/annotation_data_release.md` for the full explanation and why full
+  evidence is not published.
+- `data/annotations/annotation_template.example.csv` (tracked in git) --
+  an empty template (headers only, no pilot data) to copy locally when
+  starting a new coding project.
 
 ## Index calculation
 
@@ -191,17 +249,19 @@ Requires `data/processed/chunks.parquet` to exist. Refuses to fit a model
 (and says so, in `outputs/reports/topic_model_report.md`) if the corpus is
 too small.
 
-**Falls back to a local TF-IDF embedding if the configured
-sentence-transformer model can't be downloaded** (e.g. no network access
-to huggingface.co, as in this pilot's original build sandbox). This
-fallback is explicitly labeled in the stored output and report with three
-fields -- `topic_method=tfidf_fallback`, `topic_status=experimental`,
-`semantic_embeddings_used=false` -- and is **not the final BERTopic
-analysis**. Re-run `python scripts/train_topics.py` from a machine with
-normal internet access so the configured sentence-transformer model can
-actually be used; even then, this pilot's five-document corpus is too
-small for the resulting topics to be generalizable. See
-`docs/methodology.md` and `docs/limitations.md`.
+**Final pilot result:** the configured `all-MiniLM-L6-v2` sentence-
+transformer model was successfully used (not the local TF-IDF fallback the
+pipeline falls back to when that model can't be downloaded), producing 3
+topics and 3 outlier chunks across the corpus's 29 chunks --
+`topic_method=bertopic_sentence_transformer`,
+`semantic_embeddings_used=true`, `topic_status=experimental`. It remains
+labeled experimental regardless of which embedding path is used: this
+pilot's five-document, 29-chunk corpus is too small for the resulting
+topics to be considered stable or generalizable, and two of the three
+topics are already institution-specific rather than cross-institution
+themes (see `outputs/reports/topic_model_report.md` and
+`docs/pilot_analysis.md`). See `docs/methodology.md` and
+`docs/limitations.md`.
 
 ## Dashboard
 
@@ -286,10 +346,10 @@ If you use this pipeline or its pilot data, cite it as:
 
 ## Roadmap
 
-- [ ] Collect all five sources with `--live` from a normally-networked machine.
-- [ ] Complete human coding of the pilot (see `dashboard/pages/7_Annotation.py`).
-- [ ] Intra-coder recoding pass (~2-3 weeks after round 1).
-- [ ] Expand `config/universities.csv` toward the ~6-per-country stratified target.
+- [x] Collect all five sources with `--live` from a normally-networked machine.
+- [x] Complete human coding of the pilot (see `dashboard/pages/7_Annotation.py`).
+- [ ] Intra-coder recoding pass, to populate the `validated_rei`/`validated_pisi` indices.
+- [ ] Expand to 30+ universities on the `phase-2-30-universities` branch (see the Phase 2 Expansion Plan; foundation scaffolding -- separate registry and settings files, archival snapshot -- is in place, institutions not yet populated).
 - [ ] Add a second coder; compute weighted Cohen's kappa.
 - [ ] Extend to native-language documents per country.
 

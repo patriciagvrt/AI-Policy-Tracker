@@ -11,6 +11,7 @@ __pycache__/
 logs/
 models/
 data/raw/
+data/archive/
 data/interim/
 *.db
 *.sqlite
@@ -69,7 +70,13 @@ data/processed/*.parquet
 data/samples/*
 !data/samples/.gitkeep
 
-# Annotations may contain a researcher's working notes; keep the template but not working copies
+# Annotations: the complete pilot annotation file (with full evidence text)
+# and its private preservation copy are never tracked in git; only the
+# scores-only public dataset (data/annotations/pilot_scores_public.csv) and
+# the empty example template (data/annotations/annotation_template.example.csv)
+# are tracked. See docs/annotation_data_release.md.
+data/annotations/private/
+data/annotations/annotation_template.csv
 data/annotations/*.working.csv
 
 # Logs

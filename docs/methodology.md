@@ -52,17 +52,20 @@ failure — is logged to a `collection_audit` table and summarized in
 `outputs/reports/collection_audit.md`. One source failing does not stop
 collection of the others.
 
-**This pilot's specific build ran inside a network-sandboxed environment**
-that could not reach arbitrary external domains. Four of five documents'
-text was retrieved through a one-time, clearly-documented substitute
-retrieval step (see `data/raw/pilot_sandbox_retrieved/README.md`); the
-fifth (Lund University's PDF) could not be retrieved verbatim at all in
-that environment and is recorded as a genuine collection failure, not
-approximated. Every processing step *after* retrieval (cleaning, hashing,
-language detection, segmentation, indicator scoring) ran identically to how
-it would run in a normal environment. Re-running
-`python scripts/collect_documents.py --live` from a machine with regular
-internet access is the way to collect all five documents for real.
+**Development history note.** An early build of this pipeline ran inside a
+network-sandboxed environment that could not reach arbitrary external
+domains, and used a one-time, clearly-documented substitute retrieval step
+for some sources during that phase of development (see
+`data/raw/pilot_sandbox_retrieved/README.md`). This was a limitation of
+that specific development environment, not of the collection code itself.
+**The final pilot corpus was not collected this way:** all five documents,
+including Lund University's PDF, were subsequently collected successfully
+through the project's live, `requests`-based HTTP collection pipeline --
+5 attempted, 5 collected, 0 failures (see
+`outputs/reports/collection_audit.md`). Every processing step after
+retrieval (cleaning, hashing, language detection, segmentation, indicator
+scoring) ran identically to how it would run in any environment with
+regular internet access.
 
 ## Coding dimensions
 
@@ -100,14 +103,19 @@ dashboard and reports is labeled experimental.
 Every topic-model run records three explicit fields alongside its output:
 `topic_method` (`"bertopic_sentence_transformer"` or `"tfidf_fallback"`),
 `topic_status` (always `"experimental"` for this pilot), and
-`semantic_embeddings_used` (`true`/`false`). This pilot's own build ran in
-a sandbox with no network path to huggingface.co, so it could not download
-the configured sentence-transformer model and used the TF-IDF fallback —
-`topic_method=tfidf_fallback`, `semantic_embeddings_used=false`. **This is
-not the final BERTopic analysis.** The topic model should be re-run on a
-machine with normal internet access (`python scripts/train_topics.py`) so
-the configured sentence-transformer model can actually be used, before its
-output is treated as anything beyond a pipeline smoke test — see
+`semantic_embeddings_used` (`true`/`false`). An early development build ran
+in a sandbox with no network path to huggingface.co and used the TF-IDF
+fallback for a pipeline smoke test; **the final pilot analysis is not
+that run.** The final run successfully used the configured
+`all-MiniLM-L6-v2` sentence-transformer model —
+`topic_method=bertopic_sentence_transformer`,
+`semantic_embeddings_used=true` — producing 3 topics and 3 outlier chunks
+across the corpus's 29 chunks (see
+`outputs/reports/topic_model_report.md`). Its output remains labeled
+experimental regardless: this pilot's five-document corpus is still too
+small for the resulting topics to be considered stable or generalizable,
+and should not be treated as anything beyond a pipeline validation ahead
+of the full 30+ university study — see
 `dashboard/components/labels.py::BERTOPIC_DISCLAIMER` and
 `docs/limitations.md`.
 
@@ -169,3 +177,14 @@ evidence passage. Human-coded evidence additionally supports character
 offsets into the document's cleaned text. This is enforced at the schema
 level (`schemas.py::DimensionScore`): constructing a `DimensionScore` with
 `score > 0` and no `evidence_passage` raises a validation error.
+
+**What is public vs. private.** The complete annotation file, including
+every evidence passage, is kept locally (git-ignored) and is not
+published, because summed across a document's 18 dimensions its evidence
+passages can reconstruct most or all of that document's text, and
+redistribution rights are not yet confirmed for any of the five pilot
+sources. Only the scores themselves -- sufficient to reproduce every
+`human_rei`/`human_pisi` value reported in this project -- are published,
+in `data/annotations/pilot_scores_public.csv`. See
+`docs/annotation_data_release.md` for the full explanation and a data
+dictionary for that file.

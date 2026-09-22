@@ -1,0 +1,93 @@
+# Phase 2 ("full study") settings for the Nordic University AI Policy Tracker.
+#
+# This is the settings-file-first CLI source of truth for Phase 2, per the
+# Phase 2 Expansion Plan (Section 2). Scripts are invoked with
+# `--settings config/settings_full_study.yaml` and read every path from
+# here rather than from individual command-line flags. It is structurally
+# based on the pilot's config/settings.yaml, with every output pointed at
+# separate Phase 2 locations so pilot outputs are never read from or
+# written to by Phase 2 code.
+#
+# This file does not yet exist as a database, registry population, or
+# collected data -- it is scaffolding only, created ahead of the Phase 2
+# steps that will actually use it.
+
+project:
+  name: "Nordic University AI Policy Tracker"
+  phase: "full_study"
+  full_study_disclaimer: >
+    This is the 30+ university expansion phase. It uses a separate
+    database, registry, and settings file from the five-university pilot.
+    The pilot's data/processed/policy_tracker.db, config/universities.csv,
+    and config/settings.yaml are read-only historical records for this
+    phase and are never written to, migrated, or altered here. See the
+    Phase 2 Expansion Plan for the full rationale.
+
+collection:
+  user_agent: "NordicAIPolicyTrackerBot/0.2 (full study; contact: patriciacruz1097@gmail.com)"
+  request_delay_seconds: 3
+  request_timeout_seconds: 20
+  max_retries: 2
+  respect_robots_txt: true
+
+paths:
+  # Phase 2 registry: two linked files (see config/README_full_study_registry.md),
+  # replacing the pilot's single universities_csv.
+  institutions_csv: "config/institutions_full.csv"
+  sources_csv: "config/sources_full.csv"
+  coding_dimensions_yaml: "config/coding_dimensions.yaml"
+
+  # Phase 2 data locations, entirely separate from the pilot's data/raw,
+  # data/interim, data/processed, and data/annotations directories.
+  raw_dir: "data/raw/full_study"
+  interim_dir: "data/interim/full_study"
+  processed_dir: "data/processed/full_study"
+  annotations_dir: "data/annotations/full_study"
+  samples_dir: "data/samples/full_study"
+
+  # Phase 2 database. Does not exist yet -- created only when Phase 2
+  # collection actually begins, via the existing init_db()/SCHEMA_SQL in
+  # database.py, extended per the Phase 2 Expansion Plan (Section 2).
+  database_path: "data/processed/policy_tracker_full.db"
+
+  # Phase 2 reports live only here, never duplicated into or over the
+  # pilot's outputs/reports/pilot_analysis.md or docs/ report locations.
+  report_dir: "outputs/reports/full_study"
+
+  logs_dir: "logs"
+  models_dir: "models"
+
+  # The pilot database and registry are referenced as read-only historical
+  # inputs for cross-phase comparison only (see load_pilot_documents_as_
+  # phase2_view() in the Phase 2 Expansion Plan, Section 2). They are never
+  # a write target for any Phase 2 script.
+  pilot_database_path_readonly: "data/processed/policy_tracker.db"
+  pilot_universities_csv_readonly: "config/universities.csv"
+  pilot_settings_yaml_readonly: "config/settings.yaml"
+
+language:
+  analytical_scope: "multilingual_v1"
+  dataset_description: >
+    Publicly available AI guidance from 30+ Nordic universities, collected
+    in original language where available, with translation provenance
+    tracked per document (see the Phase 2 Expansion Plan, Section 6).
+
+segmentation:
+  chunk_size_tokens: 200
+  chunk_overlap_tokens: 40
+  respect_sentence_boundaries: true
+
+bertopic:
+  embedding_model: "all-MiniLM-L6-v2"
+  random_seed: 42
+  min_topic_size: 3
+  min_documents_for_modeling: 3
+  language: "multilingual"
+  # See the Phase 2 Expansion Plan, Section 8, for the still-open choice
+  # between multilingual embeddings on original text vs. translate-then-
+  # embed, and the stability checks required before either is finalized.
+
+indices:
+  default_weighting: "equal"
+  scale_min: 0
+  scale_max: 100

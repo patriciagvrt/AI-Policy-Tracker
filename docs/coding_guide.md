@@ -5,6 +5,15 @@ coder) uses to assign a 0-2 ordinal score to each dimension for each
 document. It is also what a second coder would use, later, to make
 inter-coder comparison meaningful.
 
+**Where to work.** Coding is done in a local, complete annotation file
+(`data/annotations/annotation_template.csv`, or a new file copied from the
+empty `data/annotations/annotation_template.example.csv` template) --
+never in `data/annotations/pilot_scores_public.csv`, which is a derived,
+scores-only publication artifact, not a working file. The complete file
+with its evidence passages stays local and is git-ignored; see
+`docs/annotation_data_release.md` for what is and isn't published from it,
+and why.
+
 ## The scale (applies to every dimension)
 
 | Score | Label | Meaning |
