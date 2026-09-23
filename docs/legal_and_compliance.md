@@ -64,9 +64,8 @@ and note anything relevant in `copyright_notice`/`license_note`.
   (`collection_status=FAILED`), never worked around.
 - **Never fabricates or summarizes text in place of a genuine extraction
   failure.** If a source's actual text cannot be obtained (network
-  failure, access denial, or — as with Lund University's PDF in this
-  pilot's original sandbox build — a fetch tool returning a
-  model-generated summary instead of the document's real sentences), the
+  failure, access denial, or a fetch tool returning a model-generated
+  summary instead of the document's real sentences), the
   document is recorded as `collection_status=FAILED`
   (or, for a source still awaiting collection, `PENDING`), never populated
   with placeholder, summarized, or approximated text. See
@@ -84,10 +83,12 @@ explicit exceptions exist only for small synthetic test fixtures under
 and the usual virtual-environment/cache directories.
 
 This means: a fresh clone of this repository, before any collection
-script has been run, contains no raw policy text, no database, and no
-embeddings — only code, configuration, documentation, and (for this
-pilot's own reproducibility) the annotation template and derived result
-files the pipeline itself produces into version-controlled locations.
+script has been run, contains no raw policy text, no database, no
+embeddings, and no complete annotation evidence — only code,
+configuration, documentation, and (for this pilot's own reproducibility)
+the scores-only public annotation dataset, the empty example annotation
+template, and derived result files the pipeline itself produces into
+version-controlled locations.
 
 **Note on this pilot's earlier delivery:** an earlier draft of this
 repository tracked `data/raw/pilot_sandbox_retrieved/*.md` (this pilot's
@@ -100,6 +101,20 @@ sources (every document's `legal_review_status` is still `pending`). The
 files themselves remain on disk (deleting them is a separate, deliberate
 decision — see "Deleting raw copies" below) but are no longer tracked by
 git.
+
+**Note on the annotation file's evidence text:** the complete pilot
+annotation file (`data/annotations/annotation_template.csv`), including
+every evidence passage, was previously tracked in git. It has since been
+removed from tracking for the same reason as the raw retrieved text above:
+its evidence passages, summed per document across 18 coding dimensions,
+can reconstruct most or all of a source document's text, and no
+redistribution license has been confirmed for any of the five sources.
+The complete file remains on disk locally (git-ignored, alongside a
+verified preservation copy at `data/annotations/private/`) for the
+project's own pipeline and validation use. Only the scores needed to
+reproduce the published human REI/PISI results are tracked in git, at
+`data/annotations/pilot_scores_public.csv` — see
+`docs/annotation_data_release.md`.
 
 ## Redistribution policy
 

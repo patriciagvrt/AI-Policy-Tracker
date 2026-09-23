@@ -84,14 +84,17 @@ pilot does that automatically.
 
 ## BERTopic small-corpus instability
 
-The topic model fit on this pilot's ~17 chunks across 4 documents is not
-stable or generalizable — `modeling/bertopic_pipeline.py` enforces a
-minimum document/chunk count before attempting a model at all, and every
-report and dashboard page describing topic output labels it
-"EXPERIMENTAL." Re-running the same pipeline with a different random seed
-or a slightly different chunk size on this same small corpus could well
-produce different topic boundaries. Topic modeling becomes more meaningful
-as the corpus grows toward the full 30+ university target.
+The topic model fit on this pilot's final corpus of 29 chunks across all 5
+documents, producing 3 topics and 3 outlier chunks, is not stable or
+generalizable — `modeling/bertopic_pipeline.py` enforces a minimum
+document/chunk count before attempting a model at all, and every report
+and dashboard page describing topic output labels it "EXPERIMENTAL." Two
+of the three topics are already institution-specific rather than
+cross-institution themes (see `outputs/reports/topic_model_report.md`).
+Re-running the same pipeline with a different random seed or a slightly
+different chunk size on this same small corpus could well produce
+different topic boundaries. Topic modeling becomes more meaningful as the
+corpus grows toward the full 30+ university target.
 
 ## Public-document availability bias
 
@@ -103,33 +106,37 @@ says nothing about whether that university has a policy, only that it
 doesn't have one that's publicly discoverable in the way this project
 looks for it.
 
-## Sandbox retrieval note (this specific pilot build)
+## Sandbox retrieval note (early development history)
 
-The initial build of this pilot ran inside a network-restricted sandbox
-that could not reach arbitrary university websites. Four documents' raw
-text was obtained via a one-time substitute retrieval step, and Lund
-University's PDF could not be retrieved at all in that environment (see
-`data/raw/pilot_sandbox_retrieved/README.md` and
-`outputs/reports/collection_audit.md`). This is a limitation of *this
-specific build environment*, not of the project's own collection code,
-which is ordinary `requests`-based Python and will work normally from any
-machine with regular internet access. As of this project's compliance
-correction, those four retrieved documents' full text is kept on disk but
-is **no longer tracked in git** (see `docs/legal_and_compliance.md`) —
-no explicit redistribution license has been confirmed for any of the five
-pilot sources.
+An early build of this pilot ran inside a network-restricted sandbox that
+could not reach arbitrary university websites, and used a one-time
+substitute retrieval step for some sources during that phase of
+development (see `data/raw/pilot_sandbox_retrieved/README.md`). This was a
+limitation of *that specific development environment*, not of the
+project's own collection code, which is ordinary `requests`-based Python.
+**This does not describe the final pilot corpus:** all five documents,
+including Lund University's PDF, were subsequently collected successfully
+through the project's live collection pipeline (see
+`outputs/reports/collection_audit.md`: 5 attempted, 5 collected, 0
+failures). The early sandbox-retrieved text is kept on disk as historical
+development context but is **not tracked in git** (see
+`docs/legal_and_compliance.md`) and is not part of the analyzed pilot
+corpus — no explicit redistribution license has been confirmed for any of
+the five pilot sources' full text.
 
-## Lund University: collection pending, not analyzed
+## Lund University: collected and analyzed
 
-Lund University's PDF has never been successfully collected in this
-project. It is shown on the Nordic Map as a selected pilot institution
-(it was one of the five sources chosen for this pilot), but its
-analytical status is, and must remain, **"collection pending"** until its
-PDF is actually retrieved from the official source — never fabricated,
-never summarized in its place, and never given an automated or
-human-coded index value without the complete document text. See
-`docs/legal_and_compliance.md` ("Never fabricates or summarizes text in
-place of a genuine extraction failure") and the collection audit log.
+Lund University's PDF was collected successfully via the project's live
+collection pipeline and is included in the pilot's human-coded and
+automated results on the same basis as the other four documents (see
+`outputs/reports/collection_audit.md`). An earlier stage of this project
+recorded Lund as a genuine, unresolved collection failure; that has since
+been resolved by a successful live collection, and this note is retained
+only so that a reader of the project's history does not mistake that
+earlier state for the final pilot's status. `docs/legal_and_compliance.md`
+("Never fabricates or summarizes text in place of a genuine extraction
+failure") continues to apply to every document in this pilot: none was
+ever fabricated or summarized in place of a real extraction.
 
 ## What this project does not claim
 
