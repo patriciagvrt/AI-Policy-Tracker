@@ -37,6 +37,16 @@ REQUIRED_INSTITUTION_HEADERS = [
     "selection_status",
     "selection_rationale",
     "exclusion_rationale",
+    # Added at the institution-registry population step (Phase 2 full-study
+    # institution stage): cross-national comparison metadata and federation
+    # linkage, not present in the pilot-era schema.
+    "official_website",
+    "institutional_profile",
+    "primary_comparison_family",
+    "comparison_tags",
+    "inclusion_method",
+    "governance_status",
+    "parent_institution_id",
 ]
 
 REQUIRED_SOURCE_HEADERS = [

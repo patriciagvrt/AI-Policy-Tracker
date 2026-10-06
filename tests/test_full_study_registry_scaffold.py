@@ -4,7 +4,11 @@ These exercise the standalone Phase 2 registry validator against small,
 in-memory-style fixture CSVs written to a temp directory -- they never
 touch config/institutions_full.csv, config/sources_full.csv, or the pilot
 config/universities.csv directly, except for one read-only check that the
-real scaffolding files currently pass validation as header-only files.
+real registry files currently pass validation. As of the institution-registry
+population step, config/institutions_full.csv holds the 35 populated
+full-study institution rows (see tests/test_full_study_institutions_registry.py
+for content-level checks on those rows); config/sources_full.csv remains
+header-only until the source-registry population step.
 """
 
 from __future__ import annotations
@@ -124,7 +128,10 @@ def test_disallowed_source_role_is_rejected(tmp_path, monkeypatch):
 
 
 def test_real_scaffolding_files_currently_pass():
-    """The actual repo scaffolding files, as of this foundation step, should
-    validate cleanly as header-only registries."""
+    """The actual repo registry files should validate cleanly: correct
+    headers, unique ids, no orphaned sources, no disallowed source_role
+    values. This no longer implies institutions_full.csv is header-only --
+    it now holds the 35 populated full-study institution rows -- only that
+    the two files remain internally consistent per the shared validator."""
     errors = validator.validate()
     assert errors == [], errors

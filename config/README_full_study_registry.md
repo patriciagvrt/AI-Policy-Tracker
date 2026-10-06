@@ -53,8 +53,49 @@ Key columns:
   or `pending` value in these columns means the source is not yet cleared
   to collect.
 
+## `institutions_full.csv` -- added institution-level columns
+
+The institution-registry population step (following this foundation
+scaffolding) added seven columns not present in the pilot-era schema, to
+support cross-national comparison and the Icelandic federation structure:
+
+- `official_website` -- the institution's homepage URL. Never a policy
+  document URL; that belongs only in `sources_full.csv`.
+- `institutional_profile` -- a short human-readable description of the
+  institution's type (e.g. "Technical university", "Business school").
+- `primary_comparison_family` -- a controlled-vocabulary category used to
+  group institutions for cross-national comparison (e.g.
+  `comprehensive_research_university`, `technical_university`,
+  `business_school`, `applied_sciences_university`,
+  `arts_specialized_institution`, `specialized_institution`).
+- `comparison_tags` -- semicolon-separated descriptive tags supplementing
+  the primary family (e.g. `research_intensive;comprehensive`).
+- `inclusion_method` -- how the institution entered the full-study sample:
+  `national_census` for Iceland (all seven Icelandic institutions are
+  included, since Iceland's full higher-education population is small
+  enough to include exhaustively) or `stratified_sample` for the other
+  four countries (seven institutions each, sampled to represent the
+  national landscape of institution types).
+- `governance_status` -- `independent` for nearly every institution;
+  `federation_lead` for the University of Iceland and `federated_member`
+  for University of Iceland at Hólar, reflecting Hólar's status as a
+  federated member of the University of Iceland.
+- `parent_institution_id` -- blank except for `holar_is`, which points to
+  `hi_is`.
+
+The pilot-era columns (`city`, `latitude`, `longitude`, `institution_type`,
+`size_category`, `technical_or_comprehensive`, `public_or_private`,
+`exclusion_rationale`) are preserved in the schema but intentionally left
+blank for the 35 full-study rows at this stage -- populating them
+precisely (especially geocoordinates) is a separate, later task, not
+inferred here.
+
 ## Current state
 
-Both files contain headers only. No institutions, sources, URLs, or
-selection decisions have been populated. Populating them is a later
-Phase 2 step, not part of this foundation scaffolding.
+`institutions_full.csv` now holds all 35 full-study institutions (7 per
+Nordic country: Sweden, Norway, Denmark, Finland, Iceland), each with
+`selection_status=full_study_selected`. `sources_full.csv` remains
+header-only: no document sources, URLs, or source-level selection
+decisions have been populated yet. Populating `sources_full.csv` -- and
+any document collection -- is a later Phase 2 step, not part of this
+institution-registry stage.
