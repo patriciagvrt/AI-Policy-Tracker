@@ -69,6 +69,8 @@ data/processed/*.parquet
 !data/processed/.gitkeep
 data/samples/*
 !data/samples/.gitkeep
+data/candidates/*
+!data/candidates/.gitkeep
 
 # Annotations: the complete pilot annotation file (with full evidence text)
 # and its private preservation copy are never tracked in git; only the

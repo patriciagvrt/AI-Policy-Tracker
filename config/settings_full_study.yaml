@@ -35,6 +35,7 @@ paths:
   # replacing the pilot's single universities_csv.
   institutions_csv: "config/institutions_full.csv"
   sources_csv: "config/sources_full.csv"
+  candidates_csv: "data/candidates/source_candidates.csv"
   coding_dimensions_yaml: "config/coding_dimensions.yaml"
 
   # Phase 2 data locations, entirely separate from the pilot's data/raw,

@@ -1,0 +1,2 @@
+User-agent: *
+Sitemap: https://nested.hi.is/sitemap_index.xml
