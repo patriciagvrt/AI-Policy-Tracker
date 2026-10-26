@@ -82,6 +82,19 @@ support cross-national comparison and the Icelandic federation structure:
   federated member of the University of Iceland.
 - `parent_institution_id` -- blank except for `holar_is`, which points to
   `hi_is`.
+- `additional_official_domains` -- added at the candidate-discovery
+  correction stage (see docs/candidate_discovery.md, "Curated additional
+  official domains"). Optional; semicolon-separated bare hostnames (no
+  scheme, no path) of extra subdomains that a human researcher has
+  verified belong to this institution but that discovery's own
+  homepage-link crawl might not reach on its own -- for example
+  `setberg.hi.is`, the University of Iceland's dedicated portal subdomain.
+  Discovery always searches these in addition to `official_website` and
+  whatever subdomains it finds organically; it never searches a domain
+  that isn't either `official_website` itself, a domain listed here, or a
+  genuine subdomain of one of those two (see `is_same_domain` in
+  `candidate_discovery.py` for the registrable-domain check that also
+  rejects a deceptive lookalike domain).
 
 The pilot-era columns (`city`, `latitude`, `longitude`, `institution_type`,
 `size_category`, `technical_or_comprehensive`, `public_or_private`,

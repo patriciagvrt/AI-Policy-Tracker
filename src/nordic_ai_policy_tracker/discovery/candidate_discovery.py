@@ -163,6 +163,13 @@ def dedupe_urls(urls: list[str]) -> tuple[list[str], int]:
 
 
 def _host_of(url: str) -> str:
+    """Hostname of a URL, or of a bare hostname string with no scheme
+    (e.g. "setberg.hi.is" as stored in additional_official_domains --
+    urlparse() alone would put a schemeless string entirely in `.path`
+    and leave `.netloc` empty, so that case is handled explicitly here).
+    """
+    if "://" not in url:
+        return url.strip().lower().split("/")[0].split(":")[0]
     return urlparse(url).netloc.lower().split(":")[0]
 
 
@@ -181,18 +188,38 @@ def _registrable_domain(host: str) -> str:
     return ".".join(labels[-2:])
 
 
-def is_same_domain(url: str, domain_root: str) -> bool:
+def is_same_domain(url: str, domain_root: str, additional_domains: list[str] | None = None) -> bool:
     """True if `url`'s host is the institution's own official domain or a
-    genuine subdomain of it (e.g. setberg.hi.is for hi.is), compared by
-    registrable domain (see _registrable_domain).
+    genuine subdomain of it (e.g. setberg.hi.is for hi.is), OR a genuine
+    subdomain of one of `additional_domains` -- a human-curated list of
+    extra official domains for this institution (see
+    institution_additional_domains and config/institutions_full.csv's
+    additional_official_domains column, documented in
+    docs/candidate_discovery.md, "Curated additional official domains").
+    Comparison is by registrable domain (see _registrable_domain).
 
-    This intentionally rejects a deceptive host that merely CONTAINS the
+    This intentionally rejects a deceptive host that merely CONTAINS an
     official domain as a substring or prefix, such as hi.is.evil.example
     or hi.is.example.com -- both reduce to a *different* registrable
     domain (evil.example / example.com respectively), so they are never
     mistaken for a genuine hi.is subdomain.
     """
-    return _registrable_domain(_host_of(url)) == _registrable_domain(_host_of(domain_root))
+    url_registrable = _registrable_domain(_host_of(url))
+    approved_roots = [domain_root, *(additional_domains or [])]
+    return any(url_registrable == _registrable_domain(_host_of(root)) for root in approved_roots)
+
+
+def institution_additional_domains(institution: dict) -> list[str]:
+    """Parse the curated, human-verified additional_official_domains
+    column from config/institutions_full.csv (semicolon-separated bare
+    hostnames) into a list. Returns [] if the column is absent or blank --
+    this is an OPTIONAL field; most institutions have none. See
+    docs/candidate_discovery.md, "Curated additional official domains".
+    """
+    raw = (institution.get("additional_official_domains") or "").strip()
+    if not raw:
+        return []
+    return [domain.strip() for domain in raw.split(";") if domain.strip()]
 
 
 # --------------------------------------------------------------------------
@@ -257,22 +284,49 @@ def url_looks_relevant(url: str, terms: list[str]) -> bool:
 # catch. See the real Iceland run: several dated Bifrost announcements
 # under that hyphenated path were originally mis-categorized "guidance".
 NEWS_URL_SEGMENTS = ["frettir", "fréttir", "news", "tilkynning"]
+# Job/vacancy postings -- e.g. the real Akureyri posting for an "AI
+# development manager" at /laus-storf/throunarstjori-gervigreindar, which
+# was mis-categorized "guidance" before this fix. "laus störf"/"laust
+# starf" (open/vacant position) and "atvinna" (employment) are the
+# common Icelandic URL conventions; "job"/"vacanc"/"career" cover English
+# ones (left-boundary-prefix style, so "vacanc" also catches "vacancy"
+# and "vacancies", "career" also catches "careers").
+JOB_URL_SEGMENTS = [
+    "laus-storf",
+    "laust-starf",
+    "atvinna",
+    "starfsauglysing",
+    "job",
+    "vacanc",
+    "career",
+]
 RESEARCH_URL_SEGMENTS = ["rannsokn", "rannsókn", "research"]
 COURSE_URL_SEGMENTS = ["namskeid", "námskeið", "/course/", "/courses/"]
 EVENT_URL_SEGMENTS = ["vidburd", "viðburð", "/event/", "/events/"]
+# English+Icelandic job-posting phrasing checked against the TITLE too,
+# since not every institution's URL slug names the page a "job" (the
+# real Akureyri example happened to, but a title check is a useful
+# second signal and is what test_classify_category_job_title_signal
+# exercises).
+JOB_TITLE_SIGNALS = ["laust starf", "laus störf", "job vacancy", "job opening", "we are hiring"]
 
 
 def classify_category(url: str, title: str, matched_strong: list[str]) -> str:
     """Infer a coarse category for human review -- never used to silently
-    drop a candidate (see docs/candidate_discovery.md); "news" is labeled
-    and penalized, not excluded (score_candidate below), so an AI news
-    item is still a discoverable lead for a researcher who wants one.
+    drop a candidate (see docs/candidate_discovery.md); "news" and "job"
+    are labeled and penalized, not excluded (score_candidate below), so
+    an AI news item or job posting is still a discoverable lead for a
+    researcher who wants one -- it just doesn't masquerade as "guidance".
     """
     path = urlparse(url).path.lower()
     title_lower = title.lower()
 
     if any(segment in path for segment in NEWS_URL_SEGMENTS):
         return "news"
+    if any(segment in path for segment in JOB_URL_SEGMENTS) or any(
+        signal in title_lower for signal in JOB_TITLE_SIGNALS
+    ):
+        return "job"
     if match_terms(path, POLICY_SIGNAL_TERMS) or match_terms(title, POLICY_SIGNAL_TERMS):
         return "policy"
     if any(segment in path for segment in RESEARCH_URL_SEGMENTS) or "rannsókn" in title_lower:
@@ -408,26 +462,70 @@ def _parse_sitemap_xml(xml_text: str) -> tuple[list[str], list[str]]:
     return page_urls, nested_sitemaps
 
 
+def _is_valid_sitemap_url(url: str, domain_root: str, additional_domains: list[str] | None) -> bool:
+    """A sitemap URL (whether from robots.txt's Sitemap: directive, the
+    /sitemap.xml fallback, or a nested <sitemapindex> entry) is only ever
+    requested if it is http(s) and within the institution's approved
+    domain scope. This is what rejects a malformed/misconfigured entry
+    such as "http://default/sitemap.xml?page=1" -- a real value seen in
+    the live Iceland run, most likely a CMS returning its internal
+    default-vhost name instead of the public hostname when it generated
+    its own sitemap index. "default" (or any other out-of-scope host)
+    simply never matches the institution's registrable domain, so no
+    special-case host list is needed -- the domain-scope check already
+    used for homepage-link-crawl/subdomain acceptance does the job here
+    too. See tests/test_candidate_discovery.py for the regression test.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return False
+    if not parsed.netloc:
+        return False
+    return is_same_domain(url, domain_root, additional_domains)
+
+
 def discover_sitemap_page_urls(
-    transport, sitemap_urls: list[str], config: DiscoveryConfig
-) -> tuple[list[str], list[str]]:
+    transport,
+    sitemap_urls: list[str],
+    config: DiscoveryConfig,
+    domain_root: str,
+    additional_domains: list[str] | None = None,
+) -> tuple[list[str], list[str], list[str], list[str]]:
     """Fetch each declared sitemap (following one level of <sitemapindex>
     nesting), returning (all page urls found, sitemap urls actually
-    fetched successfully). Bounded by max_sitemap_files_per_institution so
-    a very large sitemap index can't turn discovery into a full crawl.
+    fetched successfully, sitemap urls rejected as invalid/out-of-scope
+    before ever being requested, and fetch warnings for sitemap urls that
+    WERE valid but failed to fetch -- e.g. DNS/connection errors).
+    Bounded by max_sitemap_files_per_institution so a very large sitemap
+    index can't turn discovery into a full crawl.
+
+    Every candidate sitemap URL -- including ones discovered by parsing a
+    nested <sitemapindex>, not just the ones passed in -- is validated by
+    _is_valid_sitemap_url() before it is ever requested.
     """
     fetched: list[str] = []
+    rejected_invalid: list[str] = []
+    fetch_warnings: list[str] = []
     all_page_urls: list[str] = []
     queue = list(sitemap_urls)[: config.max_sitemap_files_per_institution]
 
     while queue and len(fetched) < config.max_sitemap_files_per_institution:
         sitemap_url = queue.pop(0)
+        if not _is_valid_sitemap_url(sitemap_url, domain_root, additional_domains):
+            rejected_invalid.append(sitemap_url)
+            logger.warning(
+                "Rejected invalid/out-of-scope sitemap URL (not requested): %s", sitemap_url
+            )
+            continue
         try:
             result = transport.get(sitemap_url)
         except requests.RequestException as exc:
+            warning = f"{sitemap_url}: {exc}"
+            fetch_warnings.append(warning)
             logger.warning("Could not fetch sitemap %s: %s", sitemap_url, exc)
             continue
         if result.status_code != 200:
+            fetch_warnings.append(f"{sitemap_url}: HTTP {result.status_code}")
             continue
         fetched.append(sitemap_url)
         page_urls, nested = _parse_sitemap_xml(result.text)
@@ -436,7 +534,12 @@ def discover_sitemap_page_urls(
             if len(fetched) + len(queue) < config.max_sitemap_files_per_institution:
                 queue.append(nested_url)
 
-    return all_page_urls[: config.max_sitemap_urls_considered], fetched
+    return (
+        all_page_urls[: config.max_sitemap_urls_considered],
+        fetched,
+        rejected_invalid,
+        fetch_warnings,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -444,10 +547,12 @@ def discover_sitemap_page_urls(
 # --------------------------------------------------------------------------
 
 
-def discover_homepage_links(transport, domain_root: str) -> list[str]:
-    """Fetch the homepage and return same-domain (including subdomain)
-    links found on it. A single hop only -- this supplements the sitemap,
-    it is not a crawler.
+def discover_homepage_links(
+    transport, domain_root: str, additional_domains: list[str] | None = None
+) -> list[str]:
+    """Fetch the homepage and return same-domain (including subdomain, and
+    any curated additional_domains) links found on it. A single hop only
+    -- this supplements the sitemap, it is not a crawler.
     """
     try:
         result = transport.get(domain_root)
@@ -460,48 +565,77 @@ def discover_homepage_links(transport, domain_root: str) -> list[str]:
     links: list[str] = []
     for a in soup.find_all("a", href=True):
         href = urljoin(domain_root, a["href"])
-        if is_same_domain(href, domain_root) and href.startswith(("http://", "https://")):
+        if is_same_domain(href, domain_root, additional_domains) and href.startswith(
+            ("http://", "https://")
+        ):
             links.append(href)
     return links
 
 
 def discover_subdomain_pages(
-    transport, homepage_links: list[str], domain_root: str, config: DiscoveryConfig
-) -> tuple[list[tuple[str, str]], list[str]]:
-    """For any homepage link that points to a genuine subdomain of the
-    institution's domain (e.g. setberg.hi.is for hi.is) rather than the
-    exact host in domain_root, also consider that subdomain's own
-    homepage and (bounded) its own sitemap -- institutions sometimes run
-    an AI-guidance portal entirely on a dedicated subdomain that the main
-    site's own sitemap never lists (this is the fix for the real-world
-    finding that hi.is returned zero candidates despite relevant material
-    existing under setberg.hi.is).
+    transport,
+    homepage_links: list[str],
+    domain_root: str,
+    config: DiscoveryConfig,
+    additional_domains: list[str] | None = None,
+) -> tuple[list[tuple[str, str]], list[str], list[str], list[str]]:
+    """Consider every curated additional official domain (see
+    institution_additional_domains) as a subdomain source UNCONDITIONALLY
+    -- a human has already verified it belongs to this institution, so
+    discovery must not depend on organically finding a link to it. This
+    is the actual fix for the real-world finding that hi.is returned zero
+    candidates despite relevant material existing on setberg.hi.is: that
+    subdomain is almost certainly NOT linked from hi.is's own homepage
+    (institutions commonly run an AI portal as a standalone destination,
+    announced some other way -- email, a QR code, a conference talk --
+    rather than linked from the main site nav), so no amount of homepage-
+    link-crawling or sitemap-following from hi.is itself could ever have
+    found it. Accepting setberg.hi.is as a subdomain (is_same_domain) is
+    necessary but not sufficient; this function is what makes discovery
+    actually KNOW to go look there.
 
-    Returns (extra_urls_with_method, sitemap_urls_fetched). Bounded to
-    MAX_EXTRA_SUBDOMAINS_PER_INSTITUTION distinct subdomains so this can't
-    turn into an unbounded crawl of every subdomain an institution owns.
+    Also considers any OTHER genuine subdomain organically found via the
+    homepage link crawl (unchanged behavior from before), for
+    institutions that do link their portal from their homepage.
+
+    Returns (extra_urls_with_method, sitemap_urls_fetched, sitemap_urls_rejected_invalid,
+    sitemap_fetch_warnings). Bounded to MAX_EXTRA_SUBDOMAINS_PER_INSTITUTION
+    distinct subdomains so this can't turn into an unbounded crawl of
+    every subdomain an institution owns.
     """
     root_host = _host_of(domain_root)
-    extra_hosts = sorted(
-        {
-            _host_of(link)
-            for link in homepage_links
-            if _host_of(link) and _host_of(link) != root_host and is_same_domain(link, domain_root)
-        }
-    )[:MAX_EXTRA_SUBDOMAINS_PER_INSTITUTION]
+    organic_hosts = {
+        _host_of(link)
+        for link in homepage_links
+        if _host_of(link)
+        and _host_of(link) != root_host
+        and is_same_domain(link, domain_root, additional_domains)
+    }
+    curated_hosts = {_host_of(domain) for domain in (additional_domains or []) if _host_of(domain)}
+    extra_hosts = sorted((organic_hosts | curated_hosts) - {root_host})[
+        :MAX_EXTRA_SUBDOMAINS_PER_INSTITUTION
+    ]
 
     extra_urls: list[tuple[str, str]] = []
     sitemaps_fetched: list[str] = []
+    sitemaps_rejected: list[str] = []
+    fetch_warnings: list[str] = []
     for host in extra_hosts:
         subdomain_root = f"https://{host}/"
         extra_urls.append((subdomain_root, "subdomain_homepage"))
-        sub_page_urls, fetched = discover_sitemap_page_urls(
-            transport, [urljoin(subdomain_root, "/sitemap.xml")], config
+        sub_page_urls, fetched, rejected, warnings = discover_sitemap_page_urls(
+            transport,
+            [urljoin(subdomain_root, "/sitemap.xml")],
+            config,
+            domain_root,
+            additional_domains,
         )
         sitemaps_fetched.extend(fetched)
+        sitemaps_rejected.extend(rejected)
+        fetch_warnings.extend(warnings)
         extra_urls.extend((u, "subdomain_sitemap") for u in sub_page_urls)
 
-    return extra_urls, sitemaps_fetched
+    return extra_urls, sitemaps_fetched, sitemaps_rejected, fetch_warnings
 
 
 # --------------------------------------------------------------------------
@@ -530,6 +664,12 @@ POLICY_SIGNAL_TITLE_BOOST = 5
 POLICY_SIGNAL_URL_BOOST = 3
 
 NEWS_PENALTY = 4
+# Job/vacancy postings routinely mention "gervigreind"/"artificial
+# intelligence" prominently (an AI-related job title, a department name)
+# without being guidance material at all -- same penalty weight as news,
+# for the same reason: still a discoverable lead, never ranked above an
+# actual policy document.
+JOB_PENALTY = 4
 
 
 @dataclass
@@ -617,6 +757,9 @@ def score_candidate(url: str, title: str, text_preview: str, content_type: str) 
         explanation_parts.append(
             f"-{NEWS_PENALTY} news/announcement page (penalized, not excluded)"
         )
+    elif category == "job":
+        score -= JOB_PENALTY
+        explanation_parts.append(f"-{JOB_PENALTY} job/vacancy posting (penalized, not excluded)")
 
     score = max(score, 0)
     if not explanation_parts:
@@ -642,9 +785,19 @@ class InstitutionAudit:
     institution_name: str
     country: str
     domain_root: str
+    additional_domains: list[str] = field(default_factory=list)
     robots_txt_fetched: bool = False
     sitemaps_declared: list[str] = field(default_factory=list)
     sitemaps_fetched: list[str] = field(default_factory=list)
+    # Sitemap URLs rejected before ever being requested (wrong scheme, or
+    # outside the institution's approved domain scope -- e.g. the real
+    # "http://default/sitemap.xml?page=1" seen in the Iceland run) and
+    # sitemap URLs that WERE in scope but failed to fetch (DNS/connection
+    # error, non-200 status). Tracked separately from `errors` (page-fetch
+    # errors) and from successful `sitemaps_fetched`, per the correction
+    # that the old "Errors: 0" summary hid exactly this kind of warning.
+    sitemap_urls_rejected_invalid: list[str] = field(default_factory=list)
+    sitemap_fetch_warnings: list[str] = field(default_factory=list)
     sitemap_urls_found: int = 0
     homepage_links_found: int = 0
     subdomains_discovered: list[str] = field(default_factory=list)
@@ -653,6 +806,13 @@ class InstitutionAudit:
     pages_fetched_but_rejected_no_strong_term: int = 0
     duplicates_removed: int = 0
     errors: list[str] = field(default_factory=list)
+    # Discovered portal/subdomain URLs that robots.txt disallowed (so were
+    # never fetched, never scored, and have no strong-term evidence either
+    # way) -- kept here for audit transparency instead of in the candidate
+    # CSV, since a zero-score, unfetched placeholder is not a candidate.
+    # See write_candidates_csv / write_audit_report and
+    # docs/candidate_discovery.md, "Non-candidate portals".
+    non_candidate_portals: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -685,11 +845,13 @@ def discover_candidates_for_institution(
     institution: dict, config: DiscoveryConfig
 ) -> tuple[list[dict], InstitutionAudit]:
     domain_root = institution["official_website"]
+    additional_domains = institution_additional_domains(institution)
     audit = InstitutionAudit(
         institution_id=institution["institution_id"],
         institution_name=institution["institution_name"],
         country=institution["country"],
         domain_root=domain_root,
+        additional_domains=additional_domains,
     )
 
     transport = (
@@ -721,10 +883,12 @@ def discover_candidates_for_institution(
     if not sitemap_urls:
         sitemap_urls = [urljoin(domain_root, "/sitemap.xml")]
 
-    sitemap_page_urls, sitemaps_fetched = discover_sitemap_page_urls(
-        transport, sitemap_urls, config
+    sitemap_page_urls, sitemaps_fetched, sitemaps_rejected, sitemap_warnings = (
+        discover_sitemap_page_urls(transport, sitemap_urls, config, domain_root, additional_domains)
     )
     audit.sitemaps_fetched = sitemaps_fetched
+    audit.sitemap_urls_rejected_invalid = sitemaps_rejected
+    audit.sitemap_fetch_warnings = sitemap_warnings
     audit.sitemap_urls_found = len(sitemap_page_urls)
 
     # --- homepage single-hop supplement ---------------------------------
@@ -738,15 +902,30 @@ def discover_candidates_for_institution(
             )
         except Exception:
             main_robots_allowed = True  # unknown -> don't block discovery on a parser error
-    homepage_links = discover_homepage_links(transport, domain_root) if main_robots_allowed else []
+    homepage_links = (
+        discover_homepage_links(transport, domain_root, additional_domains)
+        if main_robots_allowed
+        else []
+    )
     audit.homepage_links_found = len(homepage_links)
 
     # --- genuine-subdomain supplement (e.g. setberg.hi.is for hi.is) ----
-    subdomain_urls, subdomain_sitemaps_fetched = discover_subdomain_pages(
-        transport, homepage_links, domain_root, config
-    )
+    # Always includes every curated additional_official_domains entry,
+    # not only subdomains organically found via the homepage crawl -- see
+    # discover_subdomain_pages' docstring for why that distinction is the
+    # actual fix for hi.is/setberg.hi.is.
+    (
+        subdomain_urls,
+        subdomain_sitemaps_fetched,
+        subdomain_sitemaps_rejected,
+        subdomain_sitemap_warnings,
+    ) = discover_subdomain_pages(transport, homepage_links, domain_root, config, additional_domains)
     audit.subdomains_discovered = sorted({_host_of(u) for u, _ in subdomain_urls})
     audit.sitemaps_fetched = audit.sitemaps_fetched + subdomain_sitemaps_fetched
+    audit.sitemap_urls_rejected_invalid = (
+        audit.sitemap_urls_rejected_invalid + subdomain_sitemaps_rejected
+    )
+    audit.sitemap_fetch_warnings = audit.sitemap_fetch_warnings + subdomain_sitemap_warnings
 
     all_discovered = (
         [(url, "sitemap") for url in sitemap_page_urls]
@@ -764,7 +943,9 @@ def discover_candidates_for_institution(
     for url, method in all_discovered:
         method_by_normalized.setdefault(normalize_url(url), method)
 
-    same_domain_urls = [u for u in deduped_urls if is_same_domain(u, domain_root)]
+    same_domain_urls = [
+        u for u in deduped_urls if is_same_domain(u, domain_root, additional_domains)
+    ]
 
     # A URL is always worth checking if it's the main homepage or a
     # subdomain's own homepage (the content there may be AI-relevant even
@@ -798,26 +979,19 @@ def discover_candidates_for_institution(
         checked_at = datetime.now(UTC).isoformat()
 
         if robots_allowed is False:
-            candidates.append(
-                _candidate_row(
-                    institution,
-                    candidate_url=url,
-                    final_url=url,
-                    page_title="",
-                    content_type="",
-                    discovery_method=method_by_normalized.get(normalize_url(url), "unknown"),
-                    score_result=ScoreResult(
-                        score=0,
-                        matched_terms=[],
-                        matched_strong_terms=[],
-                        category="unknown",
-                        explanation="robots.txt disallowed -- not fetched",
-                    ),
-                    text_preview="",
-                    robots_allowed=False,
-                    http_status=None,
-                    checked_at=checked_at,
-                )
+            # Not a candidate: never fetched, so there is no title, text,
+            # or strong-term evidence either way -- a zero-score,
+            # unfetched placeholder has no business in source_candidates.csv
+            # (see docs/candidate_discovery.md, "Non-candidate portals").
+            # It's still recorded here for audit transparency, clearly
+            # marked as a non-candidate.
+            audit.non_candidate_portals.append(
+                {
+                    "url": url,
+                    "discovery_method": method_by_normalized.get(normalize_url(url), "unknown"),
+                    "reason": "robots.txt disallowed -- not fetched",
+                    "checked_at": checked_at,
+                }
             )
             continue
 
@@ -1049,12 +1223,18 @@ def write_audit_report(
     total_duplicates = 0
     total_errors = 0
     total_rejected_no_strong_term = 0
+    total_sitemap_rejected_invalid = 0
+    total_sitemap_fetch_warnings = 0
+    total_non_candidate_portals = 0
     for audit in result.institution_audits:
         total_requests += audit.requests_attempted
         total_candidates += audit.candidates_found
         total_duplicates += audit.duplicates_removed
         total_errors += len(audit.errors)
         total_rejected_no_strong_term += audit.pages_fetched_but_rejected_no_strong_term
+        total_sitemap_rejected_invalid += len(audit.sitemap_urls_rejected_invalid)
+        total_sitemap_fetch_warnings += len(audit.sitemap_fetch_warnings)
+        total_non_candidate_portals += len(audit.non_candidate_portals)
 
         lines.append(f"### {audit.institution_name} (`{audit.institution_id}`)")
         lines.append("")
@@ -1064,6 +1244,14 @@ def write_audit_report(
             f"- Sitemaps declared in robots.txt: {audit.sitemaps_declared or '(none declared)'}"
         )
         lines.append(f"- Sitemaps successfully fetched: {audit.sitemaps_fetched or '(none)'}")
+        lines.append(
+            f"- Sitemap URLs rejected as invalid/out-of-scope (never requested): "
+            f"{audit.sitemap_urls_rejected_invalid or '(none)'}"
+        )
+        lines.append(
+            f"- Sitemap fetch warnings (in-scope but failed to fetch): "
+            f"{audit.sitemap_fetch_warnings or '(none)'}"
+        )
         lines.append(f"- URLs found via sitemap(s): {audit.sitemap_urls_found}")
         lines.append(f"- Links found via homepage single-hop crawl: {audit.homepage_links_found}")
         lines.append(
@@ -1078,12 +1266,25 @@ def write_audit_report(
             f"{audit.pages_fetched_but_rejected_no_strong_term}"
         )
         lines.append(f"- Candidates found: {audit.candidates_found}")
+        if audit.non_candidate_portals:
+            lines.append(
+                f"- Discovered portals/subdomains that are NOT candidates "
+                f"({len(audit.non_candidate_portals)}):"
+            )
+            for portal in audit.non_candidate_portals:
+                lines.append(
+                    f"  - {portal['url']} (`{portal['discovery_method']}`) -- {portal['reason']}"
+                )
         if audit.errors:
-            lines.append(f"- Errors ({len(audit.errors)}):")
+            lines.append(
+                f"- Errors ({len(audit.errors)}) -- page fetch failures, distinct from sitemap warnings above:"
+            )
             for err in audit.errors:
                 lines.append(f"  - {err}")
         else:
-            lines.append("- Errors: none")
+            lines.append(
+                "- Errors: none (page fetch failures only -- see sitemap fetch warnings above, counted separately)"
+            )
         lines.append("")
 
     lines.append("## Totals")
@@ -1095,7 +1296,23 @@ def write_audit_report(
         f"- Pages fetched but rejected (contextual terms only, no strong AI term): {total_rejected_no_strong_term}"
     )
     lines.append(f"- Duplicate URLs removed: {total_duplicates}")
-    lines.append(f"- Errors: {total_errors}")
+    lines.append(
+        f"- Sitemap URLs rejected as invalid/out-of-scope (never requested): "
+        f"{total_sitemap_rejected_invalid}"
+    )
+    lines.append(
+        f"- Sitemap fetch warnings (in-scope but failed to fetch): {total_sitemap_fetch_warnings}"
+    )
+    lines.append(
+        f"- Discovered portals/subdomains excluded from the candidate CSV as non-candidates: "
+        f"{total_non_candidate_portals}"
+    )
+    lines.append(f"- Page fetch errors: {total_errors}")
+    lines.append(
+        "  (sitemap rejections/warnings above are counted separately from page fetch errors "
+        "-- neither is folded into the other, per the correction that an earlier report said "
+        '"Errors: 0" while sitemap fetch warnings had in fact occurred)'
+    )
     lines.append("")
 
     lines.append("## Candidate scores (all candidates, highest first)")

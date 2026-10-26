@@ -250,6 +250,46 @@ def test_classify_category_guidance_fallback():
     )
 
 
+def test_classify_category_job_url_segment():
+    # Regression test for the real-world finding: a University of Akureyri
+    # job advertisement ("Laust starf: Þróunarstjóri gervigreindar") was
+    # mis-categorized "guidance" because it matched a strong AI term with
+    # no more specific category rule catching it first.
+    assert (
+        cd.classify_category(
+            "https://x.is/en/laust-starf-throunarstjori-gervigreindar",
+            "Laust starf: Þróunarstjóri gervigreindar",
+            ["gervigreind"],
+        )
+        == "job"
+    )
+
+
+def test_classify_category_job_title_signal():
+    assert (
+        cd.classify_category(
+            "https://x.is/en/opportunities/12345",
+            "Job vacancy: AI Policy Officer",
+            ["artificial intelligence"],
+        )
+        == "job"
+    )
+
+
+def test_score_candidate_job_posting_penalized_but_not_excluded():
+    score_result = cd.score_candidate(
+        "https://x.is/en/laust-starf-throunarstjori-gervigreindar",
+        "Laust starf: Þróunarstjóri gervigreindar",
+        "Háskólinn auglýsir laust starf þróunarstjóra gervigreindar.",
+        "html",
+    )
+    assert score_result.category == "job"
+    # Penalized relative to a genuine policy/guidance page, but still
+    # discoverable -- a job posting is labeled and penalized, not excluded.
+    assert score_result.score > 0
+    assert "job" in score_result.explanation.lower()
+
+
 # --------------------------------------------------------------------------
 # Sitemap parsing (including one level of sitemap-index nesting)
 # --------------------------------------------------------------------------
@@ -285,12 +325,44 @@ def test_parse_sitemap_xml_malformed_returns_empty():
 def test_discover_sitemap_page_urls_follows_one_level_of_nesting():
     transport = cd._FixtureTransport(FIXTURES_DIR)
     config = make_config()
-    pages, fetched = cd.discover_sitemap_page_urls(
-        transport, ["https://nested.hi.is/sitemap_index.xml"], config
+    pages, fetched, rejected_invalid, fetch_warnings = cd.discover_sitemap_page_urls(
+        transport,
+        ["https://nested.hi.is/sitemap_index.xml"],
+        config,
+        "https://nested.hi.is/",
     )
     assert "https://nested.hi.is/en/artificial-intelligence-policy" in pages
     assert "https://nested.hi.is/en/library-hours" in pages
     assert len(fetched) == 3  # the index + its two nested sitemaps
+    assert rejected_invalid == []
+    assert fetch_warnings == []
+
+
+def test_discover_sitemap_page_urls_rejects_out_of_scope_host():
+    """A sitemap-index entry pointing at an invalid/out-of-scope host (such as
+    the real http://default/sitemap.xml?page=1 seen in the 26 Oct 2026 live
+    Iceland run, a CMS/reverse-proxy misconfiguration) must never be
+    requested, and must be recorded as rejected rather than silently
+    dropped or silently fetched."""
+    transport = cd._FixtureTransport(FIXTURES_DIR)
+    config = make_config()
+    pages, fetched, rejected_invalid, fetch_warnings = cd.discover_sitemap_page_urls(
+        transport,
+        [
+            "https://nested.hi.is/sitemap_index.xml",
+            "http://default/sitemap.xml?page=1",
+            "ftp://nested.hi.is/sitemap.xml",
+            "not a url at all",
+        ],
+        config,
+        "https://nested.hi.is/",
+    )
+    assert "http://default/sitemap.xml?page=1" in rejected_invalid
+    assert "ftp://nested.hi.is/sitemap.xml" in rejected_invalid
+    assert "not a url at all" in rejected_invalid
+    # the invalid URLs must never have been requested via the transport
+    assert all("default" not in url for url in fetched)
+    assert fetch_warnings == []
 
 
 # --------------------------------------------------------------------------
@@ -366,12 +438,12 @@ def test_discover_candidates_for_institution_finds_relevant_pages_only():
     # The cafeteria menu page has no matching keywords in its URL, so the
     # keyword pre-filter should mean it was never even fetched.
     assert "https://example.hi.is/en/cafeteria-menu" not in urls_found
-    admin_rows = [
-        c for c in candidates if c["candidate_url"] == "https://example.hi.is/admin/dashboard"
-    ]
-    if admin_rows:
-        assert admin_rows[0]["robots_allowed"] == "False"
-        assert admin_rows[0]["http_status"] == ""
+    # robots.txt disallows /admin/, and the URL also has no AI-relevant
+    # keyword in its path, so the keyword pre-filter excludes it before
+    # robots.txt is ever consulted -- it must never appear in the candidate
+    # CSV (see test_discover_candidates_for_institution_respects_full_disallow
+    # for the case where a robots-disallowed URL does reach that check).
+    assert "https://example.hi.is/admin/dashboard" not in urls_found
 
     assert audit.institution_id == "hi_is"
     assert audit.duplicates_removed >= 0
@@ -389,10 +461,12 @@ def test_discover_candidates_for_institution_respects_full_disallow():
     candidates, audit = cd.discover_candidates_for_institution(institution, config)
 
     assert audit.requests_attempted == 0
-    for c in candidates:
-        assert c["robots_allowed"] == "False"
-        assert c["http_status"] == ""
-        assert c["relevance_score"] == 0
+    # Robots-disallowed URLs must never be written to the candidate CSV --
+    # they belong in the audit trail only (see non_candidate_portals below).
+    assert candidates == []
+    assert len(audit.non_candidate_portals) >= 1
+    for portal in audit.non_candidate_portals:
+        assert portal["reason"] == "robots.txt disallowed -- not fetched"
 
 
 def test_discover_candidates_for_institution_follows_nested_sitemap():
@@ -447,6 +521,22 @@ def test_discover_candidates_policy_page_outranks_news_page_end_to_end():
     assert int(news_row["relevance_score"]) > 0
 
 
+def test_discover_candidates_job_posting_not_categorized_as_guidance():
+    # End-to-end regression test for the real-world finding: a University
+    # of Akureyri job advertisement for an AI development officer was
+    # categorized "guidance" in the 26 Oct 2026 live run. It must still be
+    # discoverable (penalized, not excluded) and correctly labeled "job".
+    institution = make_institution()
+    config = make_config()
+
+    candidates, _ = cd.discover_candidates_for_institution(institution, config)
+    by_url = {c["candidate_url"]: c for c in candidates}
+
+    job_url = "https://example.hi.is/en/laust-starf-throunarstjori-gervigreindar"
+    assert job_url in by_url
+    assert by_url[job_url]["inferred_category"] == "job"
+
+
 def test_discover_candidates_finds_genuine_subdomain():
     # Regression test for the real-world finding: hi.is returned zero
     # candidates even though relevant material existed on a subdomain
@@ -460,6 +550,49 @@ def test_discover_candidates_finds_genuine_subdomain():
     urls_found = {c["candidate_url"] for c in candidates}
     assert "setberg.example.hi.is" in audit.subdomains_discovered
     assert any("setberg.example.hi.is" in url for url in urls_found)
+
+
+def test_discover_candidates_curated_additional_domain_not_organically_linked():
+    # Regression test for the real-world finding: University of Iceland
+    # returned zero candidates despite relevant material existing on
+    # setberg.hi.is, because that subdomain is not linked from hi.is's own
+    # homepage (an institution's AI portal is commonly announced some other
+    # way). "Accepting a discovered subdomain is not the same as knowing
+    # that the subdomain exists" -- so a curated, human-verified
+    # additional_official_domains entry must be searched unconditionally,
+    # never only when organically discovered. The fixture equivalent here
+    # is curated.example.hi.is, which is NOT linked anywhere from
+    # example.hi.is's homepage or sitemap.
+    config = make_config()
+
+    institution_without_curation = make_institution()
+    candidates_without, audit_without = cd.discover_candidates_for_institution(
+        institution_without_curation, config
+    )
+    urls_without = {c["candidate_url"] for c in candidates_without}
+    assert "curated.example.hi.is" not in audit_without.subdomains_discovered
+    assert not any("curated.example.hi.is" in url for url in urls_without)
+
+    institution_with_curation = make_institution(
+        additional_official_domains="curated.example.hi.is"
+    )
+    candidates_with, audit_with = cd.discover_candidates_for_institution(
+        institution_with_curation, config
+    )
+    urls_with = {c["candidate_url"] for c in candidates_with}
+    assert "curated.example.hi.is" in audit_with.subdomains_discovered
+    assert "https://curated.example.hi.is/gervigreind-stefna" in urls_with
+
+
+def test_institution_additional_domains_parses_semicolon_separated_field():
+    institution = make_institution(additional_official_domains=" setberg.hi.is ; other.hi.is ")
+    assert cd.institution_additional_domains(institution) == ["setberg.hi.is", "other.hi.is"]
+
+
+def test_institution_additional_domains_blank_field_returns_empty_list():
+    institution = make_institution(additional_official_domains="")
+    assert cd.institution_additional_domains(institution) == []
+    assert cd.institution_additional_domains(make_institution()) == []
 
 
 def test_discover_candidates_never_touches_sources_or_database():

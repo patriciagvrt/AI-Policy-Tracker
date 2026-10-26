@@ -48,8 +48,13 @@ implementation.
 For each institution (filtered by `--country`, e.g. `Iceland`):
 
 1. **robots.txt** is fetched and parsed first. A URL robots.txt disallows
-   is recorded in the candidates CSV with `robots_allowed=False` and is
-   never fetched -- not even to check its title or content.
+   is never fetched -- not even to check its title or content. It is
+   never written to the candidates CSV either (a zero-score, unfetched
+   placeholder row has no evidence behind it and has no business being
+   mistaken for a real candidate); it is instead recorded, clearly marked
+   as a non-candidate, in the audit report's "non-candidate portals"
+   list -- see "Curated additional official domains and non-candidate
+   portals" below.
 2. **Sitemaps** declared in robots.txt (or a `/sitemap.xml` fallback) are
    fetched, including one level of `<sitemapindex>` nesting, up to a
    bounded number of sitemap files per institution.
@@ -132,6 +137,79 @@ how many sitemap/homepage URLs were found, how many duplicate URLs were
 removed, how many requests were attempted, how many candidates were
 found, and any errors -- plus a combined table of every candidate's score
 across all institutions searched in that run.
+
+## Curated additional official domains and non-candidate portals
+
+Added at the correction stage following the 26 October 2026 live Iceland
+run, which surfaced that the University of Iceland returned zero
+candidates despite relevant material existing on `setberg.hi.is`.
+
+**Accepting a discovered subdomain is not the same as knowing that the
+subdomain exists.** Before this fix, a genuine subdomain only entered
+discovery's search scope if it was organically found via the single-hop
+homepage link crawl. `setberg.hi.is` is not linked from `hi.is`'s own
+homepage -- institutions commonly run a dedicated AI-guidance portal as a
+standalone destination, announced through some other channel (email,
+internal wiki, a conference talk) -- so no amount of homepage-link-
+crawling or sitemap-following starting from the institution's own
+homepage could ever have found it.
+
+The fix is `additional_official_domains`, an optional, semicolon-
+separated column on `config/institutions_full.csv` (see
+`config/README_full_study_registry.md`): a curated list of extra
+hostnames that a human researcher has verified belong to the institution.
+Discovery always searches every domain listed there, in addition to
+`official_website` and whatever subdomains it finds organically --
+`setberg.hi.is` is populated for `hi_is` as the first such entry. A
+domain never becomes searchable just by being named here, though: it
+must also pass the same registrable-domain check (`is_same_domain`) used
+for organically-found subdomains, which also rejects a deceptive
+lookalike domain (e.g. `hi.is.evil.example`).
+
+**Sitemap URLs are validated before they are ever requested.** The same
+live run also showed discovery attempting invalid sitemap URLs such as
+`http://default/sitemap.xml?page=1` -- a CMS/reverse-proxy
+misconfiguration on the institution's own server, returning its internal
+default-vhost name when generating paginated sitemap-index entries.
+Every sitemap URL (including nested `<sitemapindex>` entries) is now
+checked for an `http`/`https` scheme and for being inside the
+institution's approved domain scope (`official_website`,
+`additional_official_domains`, or a genuine subdomain of either) before
+`requests.get()` is ever called on it. This is a generic domain-scope
+check, not a hardcoded "default" special case -- `default` is rejected
+because it never matches any Nordic institution's registrable domain, the
+same way any other out-of-scope host would be. Rejected URLs are recorded
+separately as "sitemap URLs rejected as invalid/out-of-scope", and a
+sitemap URL that *is* in scope but still fails to fetch (timeout,
+connection error, non-200 status) is recorded separately again as a
+"sitemap fetch warning" -- both counts are reported per institution and
+in the audit report's totals, distinctly from page-fetch `errors`, so a
+report can never again say "Errors: 0" while sitemap-fetch problems had
+in fact occurred.
+
+**Robots-disallowed portals are audit-only, not candidates.** A URL that
+robots.txt disallows (for example a login-gated student portal like
+`ugla.hi.is`) was previously written into the candidates CSV as a
+zero-score, never-fetched placeholder row "for transparency" -- but a row
+with no title, no text, and no term evidence either way has no business
+being mistaken for a real candidate. These are now recorded only in the
+audit report, under a "non-candidate portals" list, each entry naming the
+URL, how it was discovered, and the reason it was excluded (currently
+always "robots.txt disallowed -- not fetched").
+
+## Job/vacancy classification
+
+Also added at the correction stage: the 26 October 2026 live run showed a
+University of Akureyri job advertisement ("Laust starf: Þróunarstjóri
+gervigreindar" -- an AI development officer posting) categorized
+"guidance", because it matched a strong AI term with no more specific
+category rule catching it first. `classify_category` now checks a small
+set of Icelandic and English job/vacancy URL segments and title phrases
+(`laust-starf`, `atvinna`, `vacanc`, `career`, "job vacancy", etc. -- see
+`JOB_URL_SEGMENTS` / `JOB_TITLE_SIGNALS` in `candidate_discovery.py`)
+before falling back to "guidance", and a job posting's score is penalized
+(mirroring the existing news penalty) but not excluded -- it remains a
+discoverable, labeled candidate, not a hidden one.
 
 ## Dry-run / fixture mode (no live network required)
 

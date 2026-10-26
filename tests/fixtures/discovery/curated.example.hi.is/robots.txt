@@ -1,0 +1,2 @@
+User-agent: *
+Sitemap: https://curated.example.hi.is/sitemap.xml
