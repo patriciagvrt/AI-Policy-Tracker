@@ -47,6 +47,12 @@ REQUIRED_INSTITUTION_HEADERS = [
     "inclusion_method",
     "governance_status",
     "parent_institution_id",
+    # Curated, human-verified additional official domains/subdomains for
+    # this institution (e.g. a dedicated AI-guidance portal hosted on its
+    # own subdomain), semicolon-separated, bare hostnames only -- no
+    # scheme, path, or whitespace. Optional; empty is valid. See
+    # docs/candidate_discovery.md, "Curated additional official domains".
+    "additional_official_domains",
 ]
 
 REQUIRED_SOURCE_HEADERS = [
@@ -139,6 +145,26 @@ def validate() -> list[str]:
 
     # empty header-only registries are valid at the scaffolding stage --
     # i.e. zero data rows is NOT an error.
+
+    # additional_official_domains: semicolon-separated bare hostnames only
+    for row in inst_rows:
+        raw = (row.get("additional_official_domains") or "").strip()
+        if not raw:
+            continue
+        for domain in raw.split(";"):
+            domain = domain.strip()
+            if not domain:
+                errors.append(
+                    f"institution_id={row.get('institution_id')!r} has an empty entry in "
+                    f"additional_official_domains={raw!r} (remove the stray semicolon)"
+                )
+                continue
+            if "://" in domain or "/" in domain or " " in domain:
+                errors.append(
+                    f"institution_id={row.get('institution_id')!r} has an invalid "
+                    f"additional_official_domains entry {domain!r} "
+                    f"(must be a bare hostname: no scheme, path, or spaces)"
+                )
 
     # pilot registry must remain untouched by this validator
     pilot_csv = REPO_ROOT / "config" / "universities.csv"

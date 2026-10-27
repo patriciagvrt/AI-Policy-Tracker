@@ -50,3 +50,34 @@ def is_allowed(url: str, user_agent: str, timeout_seconds: int = 10) -> bool | N
         return parser.can_fetch(user_agent, url)
     except Exception:
         return None
+
+
+def get_sitemap_urls(url: str, user_agent: str, timeout_seconds: int = 10) -> list[str]:
+    """Return sitemap URLs declared in this site's robots.txt (the ``Sitemap:``
+    directive), or an empty list if robots.txt is unreachable, unparsable, or
+    declares none.
+
+    This is intentionally separate from is_allowed() above: a caller doing
+    discovery (rather than fetching a single already-known URL) needs the
+    list of sitemaps, not just a yes/no answer for one path. Written
+    defensively -- a malformed or unreachable robots.txt yields an empty
+    list rather than raising, matching is_allowed()'s "unknown means don't
+    crash the caller" philosophy.
+    """
+    robots_url = get_robots_txt_url(url)
+    try:
+        response = requests.get(
+            robots_url, timeout=timeout_seconds, headers={"User-Agent": user_agent}
+        )
+        if response.status_code >= 400:
+            return []
+        sitemap_urls: list[str] = []
+        for line in response.text.splitlines():
+            stripped = line.strip()
+            if stripped.lower().startswith("sitemap:"):
+                sitemap_url = stripped.split(":", 1)[1].strip()
+                if sitemap_url:
+                    sitemap_urls.append(sitemap_url)
+        return sitemap_urls
+    except requests.RequestException:
+        return []

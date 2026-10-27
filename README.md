@@ -107,7 +107,7 @@ src/nordic_ai_policy_tracker/
 scripts/      -- one script per pipeline stage (see below)
 dashboard/    -- Streamlit app (app.py + pages/)
 tests/        -- pytest suite, local fixtures only, no live network
-docs/         -- methodology, coding guide, data dictionary, limitations, ethics, legal & compliance
+docs/         -- methodology, coding guide, data dictionary, limitations, ethics, legal & compliance, candidate discovery
 ```
 
 ## Installation (Windows / PowerShell)
@@ -337,6 +337,25 @@ than convenience sampling. Every new source must be verified (working
 URL, official domain, substantive generative-AI content, identifiable
 audience, recorded language) before being marked `active=true`.
 
+## Policy-source candidate discovery (Phase 2)
+
+`scripts/discover_policy_candidates.py` searches each Phase 2 institution's
+own official domain for candidate AI-guidance pages and PDFs and writes
+them, with a transparent relevance score, to
+`data/candidates/source_candidates.csv` for human review. **It only
+produces candidates** -- it never writes to `config/sources_full.csv` and
+never treats a high score as automatic approval. See
+`docs/candidate_discovery.md` for the full workflow, the scoring formula,
+and the required human-review step before any candidate becomes a source.
+
+```powershell
+# Iceland only, live network:
+python scripts/discover_policy_candidates.py --country Iceland
+
+# Dry run against local fixtures, no network access:
+python scripts/discover_policy_candidates.py --country Iceland --fixtures-dir tests/fixtures/discovery
+```
+
 ## Citation
 
 If you use this pipeline or its pilot data, cite it as:
@@ -349,7 +368,9 @@ If you use this pipeline or its pilot data, cite it as:
 - [x] Collect all five sources with `--live` from a normally-networked machine.
 - [x] Complete human coding of the pilot (see `dashboard/pages/7_Annotation.py`).
 - [ ] Intra-coder recoding pass, to populate the `validated_rei`/`validated_pisi` indices.
-- [ ] Expand to 30+ universities on the `phase-2-30-universities` branch (see the Phase 2 Expansion Plan; foundation scaffolding -- separate registry and settings files, archival snapshot -- is in place, institutions not yet populated).
+- [x] Populate the 35-institution Phase 2 registry (`config/institutions_full.csv`).
+- [ ] Policy-source candidate discovery: implemented and validated (fixtures only) for Iceland; remaining countries not yet run (see `docs/candidate_discovery.md`).
+- [ ] Expand to 30+ universities on the `phase-2-30-universities` branch (see the Phase 2 Expansion Plan).
 - [ ] Add a second coder; compute weighted Cohen's kappa.
 - [ ] Extend to native-language documents per country.
 
